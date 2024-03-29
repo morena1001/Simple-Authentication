@@ -1,337 +1,100 @@
-// var data = require('./db.json');
+const express = require('express');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+var low = require("lowdb");
+var FileSync = require('lowdb/adapters/FileSync');
+var adapter = new FileSync('./database.json');
+var db = low(adapter);
 
-const express = require("express");
-  
 const PORT = process.env.PORT || 3001;
 const app = express();
+const jwtSecretKey = "abcdefghijklmnopqrstuvwxyz"
 
-app.get("/api", (req, res) => {
-    res.json({ message: "Hello from server!" });
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
+
+app.get("/", (req, res) => {
+    res.send('Auth API.\nPlease use POST /auth & POST /verify for authentication')
+});
+
+app.post("/auth", (req, res) => {
+    const { email, password } = req.body;
+
+    const user = db
+        .get("users")
+        .value()
+        .filter((user) => email === user.email);
+
+    if (user.length === 1) {
+        bcrypt.compare(
+        password, 
+        user[0].password, 
+        function (err, result) {
+            if (!result) {
+                return res.status(401).json({message: "Invalid password"});
+            }
+            else {
+                let loginData = {
+                    email,
+                    signInTime: Date.now()
+                }
+
+                const token = jwt.sign(loginData, jwtSecretKey);
+                res.status(200).json({message: "success", token})
+            }
+        });
+    }
+    else if (user.length === 0) {
+        bcrypt.hash(password, 10, function (err, hash) {
+            console.log({ email, password: hash });
+            db.get("users").push({email, password: hash}).write()
+
+            let loginData = {
+                email, 
+                signInTime: Date.now()
+            }
+
+            const token = jwt.sign(loginData, jwtSecretKey);
+            res.status(200).json({ message: "success", token })
+        });
+    }
+});
+
+app.post('/verify', (req, res) => {
+    const tokenHeaderKey = "jwt-token";
+    const authToken = req.headers[tokenHeaderKey];
+    try {
+        const verified = jwt.verify(authToken, jwtSecretKey)
+        if (verified) {
+            return res.status(200).json({ status: "logged in", message: "success" });
+        }
+        else {
+            return res.status(401).json({ status: "invalid auth", message: "error" });
+        }
+    }
+    catch (error) {
+        return res.status(401).json({ status: "invalid auth", message: "error" });
+    }
+});
+
+app.post('/check-account', (req, res) => {
+    const { email } = req.body;
+
+    // console.log(req.body);
+    
+    const user = db
+        .get("users")
+        .value()
+        .filter((user) => email === user.email);
+
+    // console.log(user);
+
+    return res.status(200).json({
+        status: user.length === 1 ? "User exists" : "User does not exists",
+        userExists: user.length === 1
+    });
 });
 
 app.listen(PORT, () => {
-console.log(`Server listening on ${PORT}`);
-});
-
-// app.get("/shows", (req, res) => {
-//   let status = req.query.status;
-//   let favorite = req.query.favorite;
-//   let search = req.query.search;
-
-//   if (search != undefined && search != "") {
-//     search = search.replaceAll("%20", " ");
-//     console.log(data.shows.filter((show) => show.title.toLowerCase().includes(search)));
-//     res.send(data.shows.filter((show) => show.title.toLowerCase().includes(search)));
-//     return;
-//   }
-  
-//   if (status == undefined || status == "") {
-//     if (favorite == undefined || favorite == "") {
-//       console.log(data.shows);
-//       res.send(data.shows);
-//       return;
-//     }
-//     else if (favorite == "no") {
-//       console.log(data.shows.filter((show) => show.favorite == "no"));
-//       res.send(data.shows.filter((show) => show.favorite == "no"));
-//       return;
-//     }
-//     else if (favorite == "yes") {
-//       console.log(data.shows.filter((show) => show.favorite == "yes"));
-//       res.send(data.shows.filter((show) => show.favorite == "yes"));
-//       return;
-//     }
-//   }
-//   else if (status == "current") {
-//     let day = req.query.day;
-
-//     switch (day) {
-//       case undefined: 
-//         if (favorite == undefined || favorite == "") {
-//           console.log(data.shows.filter((show) => show.status.includes("current")));
-//           res.send(data.shows.filter((show) => show.status.includes("current")));
-//           return;
-//         }
-//         else if (favorite == "no") {
-//           console.log(data.shows.filter((show) => show.status.includes("current") && show.favorite == "no"));
-//           res.send(data.shows.filter((show) => show.status.includes("current") && show.favorite == "no"));
-//           return;
-//         }
-//         else if (favorite == "yes") {
-//           console.log(data.shows.filter((show) => show.status.includes("current") && show.favorite == "yes"));
-//           res.send(data.shows.filter((show) => show.status.includes("current") && show.favorite == "yes"));
-//           return;
-//         }
-//         break;
-
-//       case "":
-//         if (favorite == undefined || favorite == "") {
-//           console.log(data.shows.filter((show) => show.status.includes("current")));
-//           res.send(data.shows.filter((show) => show.status.includes("current")));
-//           return;
-//         }
-//         else if (favorite == "no") {
-//           console.log(data.shows.filter((show) => show.status.includes("current") && show.favorite == "no"));
-//           res.send(data.shows.filter((show) => show.status.includes("current") && show.favorite == "no"));
-//           return;
-//         }
-//         else if (favorite == "yes") {
-//           console.log(data.shows.filter((show) => show.status.includes("current") && show.favorite == "yes"));
-//           res.send(data.shows.filter((show) => show.status.includes("current") && show.favorite == "yes"));
-//           return;
-//         }
-//         break;
-
-//       case "sunday":
-//         if (favorite == undefined || favorite == "") {
-//           console.log(data.shows.filter((show) => show.status.includes("current sunday")));
-//           res.send(data.shows.filter((show) => show.status.includes("current sunday")));
-//           return;
-//         }
-//         else if (favorite == "no") {
-//           console.log(data.shows.filter((show) => show.status.includes("current sunday") && show.favorite == "no"));
-//           res.send(data.shows.filter((show) => show.status.includes("current sunday") && show.favorite == "no"));
-//           return;
-//         }
-//         else if (favorite == "yes") {
-//           console.log(data.shows.filter((show) => show.status.includes("current sunday") && show.favorite == "yes"));
-//           res.send(data.shows.filter((show) => show.status.includes("current sunday") && show.favorite == "yes"));
-//           return;
-//         }
-//         break;
-
-//       case "monday":
-//         if (favorite == undefined || favorite == "") {
-//           console.log(data.shows.filter((show) => show.status.includes("current monday")));
-//           res.send(data.shows.filter((show) => show.status.includes("current monday")));
-//           return;
-//         }
-//         else if (favorite == "no") {
-//           console.log(data.shows.filter((show) => show.status.includes("current monday") && show.favorite == "no"));
-//           res.send(data.shows.filter((show) => show.status.includes("current monday") && show.favorite == "no"));
-//           return;
-//         }
-//         else if (favorite == "yes") {
-//           console.log(data.shows.filter((show) => show.status.includes("current monday") && show.favorite == "yes"));
-//           res.send(data.shows.filter((show) => show.status.includes("current monday") && show.favorite == "yes"));
-//           return;
-//         }
-//         break;
-
-//       case "tuesday":
-//         if (favorite == undefined || favorite == "") {
-//           console.log(data.shows.filter((show) => show.status.includes("current tuesday")));
-//           res.send(data.shows.filter((show) => show.status.includes("current tuesday")));
-//           return;
-//         }
-//         else if (favorite == "no") {
-//           console.log(data.shows.filter((show) => show.status.includes("current tuesday") && show.favorite == "no"));
-//           res.send(data.shows.filter((show) => show.status.includes("current tuesday") && show.favorite == "no"));
-//           return;
-//         }
-//         else if (favorite == "yes") {
-//           console.log(data.shows.filter((show) => show.status.includes("current tuesday") && show.favorite == "yes"));
-//           res.send(data.shows.filter((show) => show.status.includes("current tuesday") && show.favorite == "yes"));
-//           return;
-//         }
-//         break;
-
-//       case "wednesday":
-//         if (favorite == undefined || favorite == "") {
-//           console.log(data.shows.filter((show) => show.status.includes("current wednesday")));
-//           res.send(data.shows.filter((show) => show.status.includes("current wednesday")));
-//           return;
-//         }
-//         else if (favorite == "no") {
-//           console.log(data.shows.filter((show) => show.status.includes("current wednesday") && show.favorite == "no"));
-//           res.send(data.shows.filter((show) => show.status.includes("current wednesday") && show.favorite == "no"));
-//           return;
-//         }
-//         else if (favorite == "yes") {
-//           console.log(data.shows.filter((show) => show.status.includes("current wednesday") && show.favorite == "yes"));
-//           res.send(data.shows.filter((show) => show.status.includes("current wednesday") && show.favorite == "yes"));
-//           return;
-//         }
-//         break;
-
-//       case "thursday":
-//         if (favorite == undefined || favorite == "") {
-//           console.log(data.shows.filter((show) => show.status.includes("current thursday")));
-//           res.send(data.shows.filter((show) => show.status.includes("current thursday")));
-//           return;
-//         }
-//         else if (favorite == "no") {
-//           console.log(data.shows.filter((show) => show.status.includes("current thursday") && show.favorite == "no"));
-//           res.send(data.shows.filter((show) => show.status.includes("current thursday") && show.favorite == "no"));
-//           return;
-//         }
-//         else if (favorite == "yes") {
-//           console.log(data.shows.filter((show) => show.status.includes("current thursday") && show.favorite == "yes"));
-//           res.send(data.shows.filter((show) => show.status.includes("current thursday") && show.favorite == "yes"));
-//           return;
-//         }
-//         break;
-
-//       case "friday":
-//         if (favorite == undefined || favorite == "") {
-//           console.log(data.shows.filter((show) => show.status.includes("current friday")));
-//           res.send(data.shows.filter((show) => show.status.includes("current friday")));
-//           return;
-//         }
-//         else if (favorite == "no") {
-//           console.log(data.shows.filter((show) => show.status.includes("current friday") && show.favorite == "no"));
-//           res.send(data.shows.filter((show) => show.status.includes("current friday") && show.favorite == "no"));
-//           return;
-//         }
-//         else if (favorite == "yes") {
-//           console.log(data.shows.filter((show) => show.status.includes("current friday") && show.favorite == "yes"));
-//           res.send(data.shows.filter((show) => show.status.includes("current friday") && show.favorite == "yes"));
-//           return;
-//         }
-//         break;
-
-//       case "saturday":
-//         if (favorite == undefined || favorite == "") {
-//           console.log(data.shows.filter((show) => show.status.includes("current saturday")));
-//           res.send(data.shows.filter((show) => show.status.includes("current saturday")));
-//           return;
-//         }
-//         else if (favorite == "no") {
-//           console.log(data.shows.filter((show) => show.status.includes("current saturday") && show.favorite == "no"));
-//           res.send(data.shows.filter((show) => show.status.includes("current saturday") && show.favorite == "no"));
-//           return;
-//         }
-//         else if (favorite == "yes") {
-//           console.log(data.shows.filter((show) => show.status.includes("current saturday") && show.favorite == "yes"));
-//           res.send(data.shows.filter((show) => show.status.includes("current saturday") && show.favorite == "yes"));
-//           return;
-//         }
-//         break;
-
-//       case "other":
-//         if (favorite == undefined || favorite == "") {
-//           console.log(data.shows.filter((show) => show.status.includes("current other")));
-//           res.send(data.shows.filter((show) => show.status.includes("current other")));
-//           return;
-//         }
-//         else if (favorite == "no") {
-//           console.log(data.shows.filter((show) => show.status.includes("current other") && show.favorite == "no"));
-//           res.send(data.shows.filter((show) => show.status.includes("current other") && show.favorite == "no"));
-//           return;
-//         }
-//         else if (favorite == "yes") {
-//           console.log(data.shows.filter((show) => show.status.includes("current other") && show.favorite == "yes"));
-//           res.send(data.shows.filter((show) => show.status.includes("current other") && show.favorite == "yes"));
-//           return;
-//         }
-//         break;
-//     }
-//   }
-//   else if (status == "watchlist") {
-//     if (favorite == undefined || favorite == "") {
-//       console.log(data.shows.filter((show) => show.status.includes("watchlist")));
-//       res.send(data.shows.filter((show) => show.status.includes("watchlist")));
-//       return;
-//     }
-//     else if (favorite == "no") {
-//       console.log(data.shows.filter((show) => show.status.includes("watchlist") && show.favorite == "no"));
-//       res.send(data.shows.filter((show) => show.status.includes("watchlist") && show.favorite == "no"));
-//       return;
-//     }
-//     else if (favorite == "yes") {
-//       console.log(data.shows.filter((show) => show.status.includes("watchlist") && show.favorite == "yes"));
-//       res.send(data.shows.filter((show) => show.status.includes("watchlist") && show.favorite == "yes"));
-//       return;
-//     }
-//   }
-//   else if (status == "stopped") {
-//     if (favorite == undefined || favorite == "") {
-//       console.log(data.shows.filter((show) => show.status.includes("stopped")));
-//       res.send(data.shows.filter((show) => show.status.includes("stopped")));
-//       return;
-//     }
-//     else if (favorite == "no") {
-//       console.log(data.shows.filter((show) => show.status.includes("stopped") && show.favorite == "no"));
-//       res.send(data.shows.filter((show) => show.status.includes("stopped") && show.favorite == "no"));
-//       return;
-//     }
-//     else if (favorite == "yes") {
-//       console.log(data.shows.filter((show) => show.status.includes("stopped") && show.favorite == "yes"));
-//       res.send(data.shows.filter((show) => show.status.includes("stopped") && show.favorite == "yes"));
-//       return;
-//     }
-//   }
-//   else if (status == "finished") {
-//     if (favorite == undefined || favorite == "") {
-//       console.log(data.shows.filter((show) => show.status.includes("finished")));
-//       res.send(data.shows.filter((show) => show.status.includes("finished")));
-//       return;
-//     }
-//     else if (favorite == "no") {
-//       console.log(data.shows.filter((show) => show.status.includes("finished") && show.favorite == "no"));
-//       res.send(data.shows.filter((show) => show.status.includes("finished") && show.favorite == "no"));
-//       return;
-//     }
-//     else if (favorite == "yes") {
-//       console.log(data.shows.filter((show) => show.status.includes("finished") && show.favorite == "yes"));
-//       res.send(data.shows.filter((show) => show.status.includes("finished") && show.favorite == "yes"));
-//       return;
-//     }
-//   }
-
-//   console.log(404);
-//   res.sendStatus(404);
-// });
-
-// app.get("/shows/:id", (req, res) => {
-//   console.log(data.shows.filter((show) => show.id == req.params.id));
-//   res.send(data.shows.filter((show) => show.id == req.params.id));
-// });
-
-// app.post("/shows", (req, res) => {
-//   response = {
-//     id: req.body.id,
-//     title: req.body.title,
-//     status: req.body.status,
-//     favorite: req.body.favorite
-//   }
-
-//   data.shows.push(response);
-//   fs.writeFileSync("./server/db.json", JSON.stringify(data));
-
-//   console.log(response);
-//   res.send(JSON.stringify(response));
-// });
-
-// app.put("/shows/:id", (req, res) => {
-//   for (let i = 0; i < data.shows.length; i++) {
-//     if (data.shows[i].id == req.body.id) {
-//       data.shows[i].title = req.body.title;
-//       data.shows[i].status = req.body.status;
-//       data.shows[i].favorite = req.body.favorite;
-//       fs.writeFileSync("./server/db.json", JSON.stringify(data));
-
-//       console.log(data.shows[i]);
-//       res.send(data.shows[i]);
-//       return;
-//     }
-//   }
-//   console.log("404");
-//   res.sendStatus(404);
-// });
-
-// app.delete("/shows/:id", (req, res) => {
-//   // let show = data.shows.filter((show) => show.id == req.params.id);
-//   for (let i = 0; i < data.shows.length; i++) {
-//     if (data.shows[i].id == req.params.id) {
-//       data.shows.splice(i, 1);
-//       fs.writeFileSync("./server/db.json", JSON.stringify(data));
-
-//       console.log(data.shows);
-//       res.send(data.shows);
-//       return;
-//     }
-//   }
-//   console.log("404");
-//   res.sendStatus(404); 
-// });
+    console.log(`Server listening on ${PORT}`);
+    });
