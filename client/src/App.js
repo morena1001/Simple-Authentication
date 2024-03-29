@@ -6,7 +6,7 @@ import './App.css';
 
 function App() {
   const [loggedIn, setLoggedIn] = useState(false);
-  const [email, setEmail] = useState("HA");
+  const [email, setEmail] = useState("");
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user"));

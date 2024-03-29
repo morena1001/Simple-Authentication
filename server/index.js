@@ -79,8 +79,6 @@ app.post('/verify', (req, res) => {
 
 app.post('/check-account', (req, res) => {
     const { email } = req.body;
-
-    // console.log(req.body);
     
     const user = db
         .get("users")
